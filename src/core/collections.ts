@@ -1,15 +1,11 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { createRequire } from 'node:module';
 import yaml from 'js-yaml';
 
 import type { DiscoveryConfig, RegisteredCollection, CollectionListItem, RequestInfo } from '../types.js';
 import { discoverCollections } from './discover.js';
-
-// Reuses @usebruno/cli's collection parser via createRequire since it has no exports map
-const require = createRequire(import.meta.url);
-const { createCollectionJsonFromPathname } = require('@usebruno/cli/src/utils/collection');
+import { readCollectionItems } from './readCollection.js';
 
 const collectionIdFromPath = (collectionPath: string): string =>
   crypto.hash('sha1', path.resolve(collectionPath)).slice(0, 12);
@@ -137,7 +133,7 @@ export class CollectionRegistry {
   listRequests(collectionId: string): RequestInfo[] | null {
     const collection = this.find(collectionId);
     if (!collection) return null;
-    const { items } = createCollectionJsonFromPathname(collection.path);
+    const items = readCollectionItems(collection.path);
     return flattenRequests(items, collection.path);
   }
 }
