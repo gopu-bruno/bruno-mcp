@@ -21,17 +21,22 @@ const { collections, source, diagnostics } = discoverCollections(config);
 
 if (verbose) {
   for (const d of diagnostics) log(d);
-  log(`resolved ${collections.length} collection${collections.length === 1 ? '' : 's'} from source: ${source ?? 'none'}`);
+  log(`Found ${collections.length} collection${collections.length === 1 ? '' : 's'} (source: ${source ?? 'none'})`);
 }
 
 if (collections.length === 0) {
   log(
-    'no collections registered. Pass --collection <path> / --workspace <path>, or launch from inside a Bruno project. Auto-discovery of Bruno desktop collections is on but found nothing (open a collection in the Bruno app, or pass --no-auto-discovery to silence this fallback).'
+    'No collections found. Available options:\n' +
+    '  --collection <path>   Pass a collection path\n' +
+    '  --workspace <path>    Pass a workspace path\n' +
+    '  Or run from inside a Bruno project folder.\n' +
+    'Auto-discovery checked recent collections but found none. ' +
+    'Use --no-auto-discovery to skip this check.'
   );
 }
 
 startStdioServer({ config, verbose }).catch((err) => {
-  process.stderr.write(`bruno-mcp: fatal error: ${err && err.stack ? err.stack : err}\n`);
+  process.stderr.write(`bruno-mcp: Something went wrong while starting the server:\n${err && err.stack ? err.stack : err}\n`);
   process.exit(1);
 });
 

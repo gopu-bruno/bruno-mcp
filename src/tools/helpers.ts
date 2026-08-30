@@ -49,8 +49,7 @@ export const collectionPathSchema = () =>
     .string()
     .describe(
       'Absolute path to the collection directory, the one containing bruno.json or opencollection.yml. ' +
-        'Any Bruno collection on this machine can be addressed, not only those returned by list_collections, ' +
-        'so a path the user names in conversation can be passed straight through without listing first.'
+        'Get this from list_collections, or use a path the user provides directly.'
     );
 
 // Optional per-run variable overrides, shared by execute_request and run_collection.
@@ -59,5 +58,5 @@ export const variablesSchema = () =>
     .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
     .optional()
     .describe(
-      'Override (or add) environment variables for this run only (maps to bru run --env-var name=value). Values are applied on top of the selected environment; names not already defined are added as run-scoped variables.'
+      'Override (or add) environment variables for this request, replacing any values from the environment.'
     );

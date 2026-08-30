@@ -72,9 +72,11 @@ interface IndexedFolder {
   seq: number | undefined;
 }
 
-/** A .bru file writes `meta` and the verb block first and 
- * everything expensive (body, script, tests, docs) after.
-*/
+/**
+ * For quick scanning, we only read the first part of .bru files.
+ * This is enough to get the meta block (name, type, seq) and HTTP verb block (method, url)
+ * without parsing the potentially large body, scripts, or tests that come later.
+ */
 const HEAD_BYTES = 4096;
 
 const readHead = (filePath: string): string => {
@@ -88,12 +90,13 @@ const readHead = (filePath: string): string => {
   }
 };
 
-const BRU_META_BLOCK = /^meta\s*\{([\s\S]*?)^\}/m;
-const BRU_VERB_BLOCK = /^(get|post|put|delete|patch|head|options|trace)\s*\{([\s\S]*?)^\}/im;
-const BRU_NAME = /^\s*name:\s*(.*)$/m;
-const BRU_TYPE = /^\s*type:\s*(.*)$/m;
-const BRU_SEQ = /^\s*seq:\s*(\d+)\s*$/m;
-const BRU_URL = /^\s*url:\s*(.*)$/m;
+// Regex patterns to extract key info from .bru files
+const BRU_META_BLOCK = /^meta\s*\{([\s\S]*?)^\}/m;           // The meta { ... } block with name, type, seq
+const BRU_VERB_BLOCK = /^(get|post|put|delete|patch|head|options|trace)\s*\{([\s\S]*?)^\}/im;  // HTTP verb block
+const BRU_NAME = /^\s*name:\s*(.*)$/m;   // Request name inside meta block
+const BRU_TYPE = /^\s*type:\s*(.*)$/m;   // Request type (http, graphql, etc.)
+const BRU_SEQ = /^\s*seq:\s*(\d+)\s*$/m; // Sequence number for ordering
+const BRU_URL = /^\s*url:\s*(.*)$/m;     // URL inside verb block
 
 const field = (block: string, pattern: RegExp): string | null => {
   const match = block.match(pattern);

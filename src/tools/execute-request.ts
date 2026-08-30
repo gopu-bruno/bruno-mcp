@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { executeRequest } from '../core/execute.js';
 import { collectionPathSchema, textResult, unknownCollectionMessage, variablesSchema, type ToolContext } from './helpers.js';
 
+// Pattern to detect template variables like {{variableName}}
 const TEMPLATE_VAR = /\{\{\s*[^}\s]+\s*\}\}/;
 
 const hasUnresolvedVariables = (result: any): boolean => {
@@ -17,10 +18,9 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
     {
       title: 'Execute a Bruno request',
       description:
-        "Execute a named request from a Bruno collection through Bruno's runtime, applying the collection's environment variables, scripts, assertions, tests, and configured auth. " +
+        'Execute a named request from a Bruno collection through Bruno\'s runtime, applying the collection\'s environment variables, scripts, assertions, tests, and configured auth. ' +
         'Returns the status, request and response headers, response body in full, and assertion/test results. ' +
-        "Output carries only the Bruno CLI's own masking: credential-bearing REQUEST headers are masked by name, and values the run knows to be secrets are scrubbed. " +
-        'Response headers are not masked (a Set-Cookie session is returned in full), and response bodies and URL query values are returned as-is, so treat the result as potentially containing live credentials.',
+        'Returns the HTTP status, headers, response body, and any test results.',
       inputSchema: {
         collectionPath: collectionPathSchema(),
         requestPath: z
@@ -46,8 +46,8 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
       if (!registry.resolveRequestPath(collectionPath, requestPath)) {
         return textResult(
           {
-            error: `Request not found in collection "${collection.name}": ${requestPath}`,
-            hint: 'Use the exact relativePath from list_requests.',
+            error: `Request not found: "${requestPath}" in collection "${collection.name}"`,
+            hint: 'Use the exact relative path from list_requests.',
             availableRequests: (registry.listRequests(collectionPath) || []).map((r) => r.relativePath)
           },
           true
@@ -59,8 +59,8 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
         if (!envs.includes(environment)) {
           return textResult(
             {
-              error: `Unknown environment "${environment}" in collection "${collection.name}".`,
-              hint: 'Environment names are case-sensitive. Omit environment to run with none.',
+              error: `The environment "${environment}" doesn't exist in the "${collection.name}" collection.`,
+              hint: 'Environment names are case-sensitive. Omit environment to run without one.',
               availableEnvironments: envs
             },
             true
@@ -87,7 +87,7 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
           !result.ok
         );
       } catch (err: any) {
-        return textResult({ error: err && err.message ? err.message : String(err) }, true);
+        return textResult({ error: `Something went wrong while running the request: ${err && err.message ? err.message : String(err)}` }, true);
       }
     }
   );

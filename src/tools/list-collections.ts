@@ -12,24 +12,23 @@ export const registerListCollectionsTool = (server: McpServer, { registry }: Too
     {
       title: 'List Bruno collections',
       description:
-        'List Bruno collections: by default the ones this server was configured or discovered to expose, ' +
-        'or the ones registered in a particular workspace when "workspacePath" is given. ' +
+        'List all available Bruno collections: by default the ones this server was configured or discovered to expose. ' +
         'Returns the name, filesystem path, and available environments for each. ' +
-        'A collection is addressed by its path: pass the returned "path" as collectionPath to the other tools. ' +
+        'Use this first to discover what collections exist and get the path needed for other tools. ' +
         'Optionally filter by a search term (matched against name, path, and workspace name).',
       inputSchema: {
         workspacePath: z
           .string()
           .optional()
           .describe(
-            'Absolute path to a Bruno workspace directory, the one containing workspace.yml. ' +
-              'Lists the collections registered in that workspace instead of this server\'s own scope. ' +
-              'Any workspace on this machine works, so a path the user names in conversation can be passed straight through.'
+            'Absolute path to a Bruno workspace folder (contains workspace.yml) to list collections from that workspace specifically. ' +
+              'Any workspace on this machine works, so a path the user names in conversation can be passed straight through. ' +
+              'Leave empty to list all collections the server knows about.'
           ),
         search: z
           .string()
           .optional()
-          .describe('Case-insensitive substring filter matched against collection name, path, and workspace name.')
+          .describe('Filter collections by name (e.g., "payments" to find payment-related collections). Case-insensitive.')
       },
       annotations: {
         readOnlyHint: true,
@@ -66,10 +65,10 @@ export const registerListCollectionsTool = (server: McpServer, { registry }: Too
         count: collections.length,
         filter: { search: search || null },
         ...(noMatch
-          ? { hint: `No collections matched "${search}". Call list_collections without "search" to see all ${all.length}.` }
+          ? { hint: `No collections matched "${search}". Try calling list_collections without the search filter to see all ${all.length} available collections.` }
           : {}),
         ...(workspace && all.length === 0
-          ? { hint: 'This workspace lists no collections.' }
+          ? { hint: 'This workspace doesn\'t have any collections yet.' }
           : {}),
         collections
       });

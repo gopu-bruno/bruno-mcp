@@ -210,9 +210,10 @@ const autoDiscoverFromBruno = (): {
   };
 };
 
-// Explicit --collection/--workspace scopes the server to exactly what is passed in
-// --cwd-discovery is on try CWD walk-up.
-// --auto-discovery is on (default) fall back on collections opened in the Bruno app
+// Discovery process
+// 1. Explicit --collection/--workspace flags scope to those paths
+// 2. --cwd-discovery walks up from CWD looking for collection or workspace markers
+// 3. --auto-discovery (default) falls back to collections opened in Bruno App
 export const discoverCollections = (
   config: DiscoveryConfig
 ): { collections: DiscoveredCollection[]; source: string | null; diagnostics: string[] } => {
