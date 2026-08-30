@@ -2,7 +2,14 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { executeRequest } from '../core/execute.js';
-import { textResult, unknownCollectionMessage, variablesSchema, type ToolContext } from './helpers.js';
+import { collectionPathSchema, textResult, unknownCollectionMessage, variablesSchema, type ToolContext } from './helpers.js';
+
+const TEMPLATE_VAR = /\{\{\s*[^}\s]+\s*\}\}/;
+
+const hasUnresolvedVariables = (result: any): boolean => {
+  const url = result && result.request ? result.request.url : null;
+  return typeof url === 'string' && TEMPLATE_VAR.test(url);
+};
 
 export const registerExecuteRequestTool = (server: McpServer, { registry, verbose }: ToolContext): void => {
   server.registerTool(
@@ -11,10 +18,11 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
       title: 'Execute a Bruno request',
       description:
         "Execute a named request from a Bruno collection through Bruno's runtime, applying the collection's environment variables, scripts, assertions, tests, and configured auth. " +
-        'Sensitive data is withheld: all request and response headers are omitted and URL query values are redacted. ' +
-        'Returns status, response body, and assertion/test results; large bodies are truncated.',
+        'Returns the status, request and response headers, response body in full, and assertion/test results. ' +
+        "Output carries only the Bruno CLI's own masking: credential-bearing REQUEST headers are masked by name, and values the run knows to be secrets are scrubbed. " +
+        'Response headers are not masked (a Set-Cookie session is returned in full), and response bodies and URL query values are returned as-is, so treat the result as potentially containing live credentials.',
       inputSchema: {
-        collectionId: z.string().describe('Collection id returned by list_collections.'),
+        collectionPath: collectionPathSchema(),
         requestPath: z
           .string()
           .describe('Relative path of the request inside the collection, as returned by list_requests (e.g. "users/get-user.bru").'),
@@ -28,28 +36,26 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
         openWorldHint: true
       }
     },
-    async ({ collectionId, requestPath, environment, variables }) => {
+    async ({ collectionPath, requestPath, environment, variables }) => {
       registry.refresh();
-      const collection = registry.resolve(collectionId);
+      const collection = registry.resolve(collectionPath);
       if (!collection) {
-        return textResult(unknownCollectionMessage(registry, collectionId), true);
+        return textResult(unknownCollectionMessage(registry, collectionPath), true);
       }
 
-      const requests = registry.listRequests(collectionId) || [];
-      if (!requests.some((r) => r.relativePath === requestPath)) {
-        const known = requests.map((r) => r.relativePath);
+      if (!registry.resolveRequestPath(collectionPath, requestPath)) {
         return textResult(
           {
             error: `Request not found in collection "${collection.name}": ${requestPath}`,
             hint: 'Use the exact relativePath from list_requests.',
-            availableRequests: known
+            availableRequests: (registry.listRequests(collectionPath) || []).map((r) => r.relativePath)
           },
           true
         );
       }
 
       if (environment) {
-        const envs = registry.environments(collectionId);
+        const envs = registry.environments(collectionPath);
         if (!envs.includes(environment)) {
           return textResult(
             {
@@ -70,7 +76,16 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
           variables,
           verbose
         });
-        return textResult(result, !result.ok);
+        const needsEnvironment = !result.ok && !environment && hasUnresolvedVariables(result);
+        return textResult(
+          {
+            ...result,
+            ...(needsEnvironment
+              ? { hint: 'No environment was selected.', availableEnvironments: registry.environments(collectionPath) }
+              : {})
+          },
+          !result.ok
+        );
       } catch (err: any) {
         return textResult({ error: err && err.message ? err.message : String(err) }, true);
       }

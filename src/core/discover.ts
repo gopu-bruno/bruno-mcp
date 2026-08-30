@@ -34,7 +34,7 @@ export const isWorkspaceDir = (dir: string): boolean => {
   return fs.existsSync(path.join(dir, 'workspace.yml'));
 };
 
-const collectionsFromWorkspace = (workspacePath: string): DiscoveredCollection[] => {
+export const collectionsFromWorkspace = (workspacePath: string): DiscoveredCollection[] => {
   const workspaceYml = path.join(workspacePath, 'workspace.yml');
   if (!fs.existsSync(workspaceYml)) return [];
 
@@ -235,7 +235,7 @@ export const discoverCollections = (
     entries = dedupeByPath(fromExplicit);
     source = 'explicit';
   } else if (config.cwdDiscovery) {
-    const cwd = config.cwdPath ? path.resolve(config.cwdPath) : process.cwd();
+    const cwd = process.cwd();
     const { entries: cwdEntries, found } = discoverFromCwd(cwd);
     if (cwdEntries.length > 0) {
       entries = dedupeByPath(cwdEntries);

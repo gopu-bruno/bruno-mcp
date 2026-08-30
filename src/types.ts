@@ -6,9 +6,8 @@ export interface DiscoveredCollection {
 }
 
 export interface RegisteredCollection {
-  id: string;
-  name: string;
   path: string;
+  name: string;
   workspacePath: string | null;
   workspaceName: string | null;
 }
@@ -21,6 +20,8 @@ export interface RequestInfo {
   name: string;
   pathname: string;
   relativePath: string;
+  /** `http-request`, `graphql-request`, `grpc-request`, `ws-request`. */
+  type: string | null;
   method: string | null;
   url: string | null;
 }
@@ -35,7 +36,6 @@ export interface RunOptions {
 export interface DiscoveryConfig {
   explicitCollections: string[];
   explicitWorkspaces: string[];
-  cwdPath: string | null;
   cwdDiscovery: boolean;
   autoDiscovery: boolean;
 }

@@ -1,14 +1,10 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 
 import type { DiscoveryConfig, RegisteredCollection, CollectionListItem, RequestInfo } from '../types.js';
-import { discoverCollections } from './discover.js';
-import { readCollectionItems } from './readCollection.js';
-
-const collectionIdFromPath = (collectionPath: string): string =>
-  crypto.hash('sha1', path.resolve(collectionPath)).slice(0, 12);
+import { collectionsFromWorkspace, discoverCollections, isCollectionDir, isWorkspaceDir } from './discover.js';
+import { detectFormat, isRequestFile, readCollectionIndex, type CollectionFormat } from './readCollection.js';
 
 const collectionNameFromConfig = (collectionPath: string): string => {
   const brunoJsonPath = path.join(collectionPath, 'bruno.json');
@@ -68,21 +64,15 @@ export const filterRequests = (
   return out;
 };
 
-const flattenRequests = (items: any[], basePath: string, acc: RequestInfo[] = []): RequestInfo[] => {
-  for (const item of items || []) {
-    if (item.type === 'folder') {
-      flattenRequests(item.items, basePath, acc);
-    } else {
-      acc.push({
-        name: item.name.replace(/\.(bru|yml)$/, ''),
-        pathname: item.pathname,
-        relativePath: path.relative(basePath, item.pathname),
-        method: (item.request && item.request.method) || null,
-        url: (item.request && item.request.url) || null
-      });
-    }
-  }
-  return acc;
+export interface ResolvedRequestFile {
+  path: string;
+  format: CollectionFormat;
+}
+
+/** True when `child` sits under `parent`: not equal to it, and not reachable only via `..`. */
+const isInside = (parent: string, child: string): boolean => {
+  const rel = path.relative(parent, child);
+  return rel.length > 0 && !rel.startsWith('..') && !path.isAbsolute(rel);
 };
 
 export class CollectionRegistry {
@@ -97,7 +87,6 @@ export class CollectionRegistry {
   refresh(): void {
     const { collections } = discoverCollections(this.config);
     this.collections = collections.map((entry) => ({
-      id: collectionIdFromPath(entry.path),
       name: entry.nameInWorkspace || collectionNameFromConfig(entry.path),
       path: entry.path,
       workspacePath: entry.workspacePath || null,
@@ -105,13 +94,22 @@ export class CollectionRegistry {
     }));
   }
 
-  private find(collectionId: string): RegisteredCollection | null {
-    return this.collections.find((c) => c.id === collectionId) || null;
+  private find(collectionPath: string): RegisteredCollection | null {
+    const target = path.resolve(String(collectionPath));
+    const configured = this.collections.find((c) => c.path === target);
+    if (configured) return configured;
+
+    if (!isCollectionDir(target)) return null;
+    return {
+      path: target,
+      name: collectionNameFromConfig(target),
+      workspacePath: null,
+      workspaceName: null
+    };
   }
 
   list(): CollectionListItem[] {
     return this.collections.map((c) => ({
-      id: c.id,
       name: c.name,
       path: c.path,
       workspaceName: c.workspaceName,
@@ -120,20 +118,57 @@ export class CollectionRegistry {
     }));
   }
 
-  resolve(collectionId: string): RegisteredCollection | null {
-    return this.find(collectionId);
+  listWorkspace(workspacePath: string): { name: string; collections: CollectionListItem[] } | null {
+    const target = path.resolve(String(workspacePath));
+    if (!isWorkspaceDir(target)) return null;
+
+    const members = collectionsFromWorkspace(target);
+    return {
+      name: members[0]?.workspaceName || path.basename(target),
+      collections: members.map((entry) => ({
+        name: entry.nameInWorkspace || collectionNameFromConfig(entry.path),
+        path: entry.path,
+        workspaceName: entry.workspaceName,
+        workspacePath: entry.workspacePath,
+        environments: listEnvironments(entry.path)
+      }))
+    };
   }
 
-  environments(collectionId: string): string[] {
-    const collection = this.find(collectionId);
+  resolve(collectionPath: string): RegisteredCollection | null {
+    return this.find(collectionPath);
+  }
+
+  environments(collectionPath: string): string[] {
+    const collection = this.find(collectionPath);
     if (!collection) return [];
     return listEnvironments(collection.path);
   }
 
-  listRequests(collectionId: string): RequestInfo[] | null {
-    const collection = this.find(collectionId);
+  listRequests(collectionPath: string): RequestInfo[] | null {
+    const collection = this.find(collectionPath);
     if (!collection) return null;
-    const items = readCollectionItems(collection.path);
-    return flattenRequests(items, collection.path);
+    return readCollectionIndex(collection.path);
+  }
+
+  resolveRequestPath(collectionPath: string, relativePath: string): ResolvedRequestFile | null {
+    const collection = this.find(collectionPath);
+    if (!collection) return null;
+
+    const format = detectFormat(collection.path);
+    if (!format) return null;
+
+    const target = path.resolve(collection.path, relativePath);
+    if (!isInside(collection.path, target)) return null;
+    if (!isRequestFile(collection.path, target, format)) return null;
+
+    try {
+      if (!fs.statSync(target).isFile()) return null;
+      if (!isInside(fs.realpathSync(collection.path), fs.realpathSync(target))) return null;
+    } catch (_) {
+      return null;
+    }
+
+    return { path: target, format };
   }
 }

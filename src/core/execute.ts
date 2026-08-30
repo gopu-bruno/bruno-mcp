@@ -10,9 +10,7 @@ import type { RunOptions, VariableOverrides } from '../types.js';
 const require = createRequire(import.meta.url);
 const BRU_BIN: string = require.resolve('@usebruno/cli/bin/bru.js');
 
-const MAX_INLINE_BODY_BYTES = 50 * 1024;
 const DEFAULT_TIMEOUT_MS = 120 * 1000;
-const REDACTED = '[redacted]';
 
 let sessionTmpDir: string | null = null;
 
@@ -44,7 +42,7 @@ const buildRunArgs = (
   { environment, variables }: RunOptions = {},
   reportPath: string
 ): string[] => {
-  const args = ['run', ...paths, '--reporter-json', reportPath, '--reporter-skip-all-headers'];
+  const args = ['run', ...paths, '--reporter-json', reportPath];
 
   if (environment) args.push('--env', String(environment));
 
@@ -61,71 +59,27 @@ const buildRunArgs = (
   return args;
 };
 
-interface TruncatedBody {
-  inline: string | null;
-  truncated: boolean;
-  originalByteLength?: number;
-}
-
-const truncateBody = (body: unknown): TruncatedBody => {
-  if (body == null) return { inline: null, truncated: false };
-  const str = typeof body === 'string' ? body : JSON.stringify(body);
-  const byteLength = Buffer.byteLength(str, 'utf8');
-  if (byteLength <= MAX_INLINE_BODY_BYTES) {
-    return { inline: str, truncated: false };
-  }
-  // Return the truncated body
-  return {
-    inline: str.slice(0, MAX_INLINE_BODY_BYTES),
-    truncated: true,
-    originalByteLength: byteLength
-  };
-};
-
-const redactUrl = (rawUrl: any): { url: string | null; redacted: boolean } => {
-  if (typeof rawUrl !== 'string' || rawUrl.length === 0) {
-    return { url: rawUrl == null ? null : rawUrl, redacted: false };
-  }
-  try {
-    const u = new URL(rawUrl);
-    let redacted = false;
-    if (u.username || u.password) {
-      u.username = '';
-      u.password = '';
-      redacted = true;
-    }
-    for (const key of Array.from(u.searchParams.keys())) {
-      u.searchParams.set(key, REDACTED);
-      redacted = true;
-    }
-    return { url: u.toString(), redacted };
-  } catch (_) {
-    // On error, defensively drop userinfo and the entire query string.
-    const noUserinfo = rawUrl.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, '$1');
-    const qIndex = noUserinfo.indexOf('?');
-    const url = qIndex === -1 ? noUserinfo : `${noUserinfo.slice(0, qIndex)}?${REDACTED}`;
-    return { url, redacted: url !== rawUrl };
-  }
+const formatBody = (body: unknown): string | null => {
+  if (body == null) return null;
+  return typeof body === 'string' ? body : JSON.stringify(body);
 };
 
 const formatResponse = (response: any) => {
   if (!response) return null;
-  const bodyResult = truncateBody(response.data);
   return {
     status: response.status,
     statusText: response.statusText,
     responseTimeMs: response.responseTime,
-    body: bodyResult.inline,
-    bodyTruncated: bodyResult.truncated,
-    bodyByteLength: bodyResult.originalByteLength
+    headers: response.headers || null,
+    body: formatBody(response.data)
   };
 };
 
-// Format one `bru run` result entry into a redacted, agent-facing object.
 const formatResultEntry = (entry: any) => {
   const rawRequest = entry && entry.request ? entry.request : null;
-  const { url, redacted: redactedUrl } = redactUrl(rawRequest ? rawRequest.url : null);
-  const request = rawRequest ? { method: rawRequest.method, url } : null;
+  const request = rawRequest
+    ? { method: rawRequest.method, url: rawRequest.url ?? null, headers: rawRequest.headers || null }
+    : null;
   const response = formatResponse(entry && entry.response ? entry.response : null);
   const responseOk = response && typeof response.status === 'number' && response.status > 0;
   return {
@@ -135,8 +89,7 @@ const formatResultEntry = (entry: any) => {
     response,
     assertionResults: entry ? entry.assertionResults : null,
     testResults: entry ? entry.testResults : null,
-    error: entry && entry.error ? entry.error : null,
-    _redactedUrl: redactedUrl
+    error: entry && entry.error ? entry.error : null
   };
 };
 
@@ -169,6 +122,8 @@ const normalizeReport = (report: any): { entries: any[]; summary: any } => {
 export const formatResult = ({ exitCode, report, stderr, stdout, reportParseError }: RawRunResult) => {
   const { entries, summary } = normalizeReport(report);
   const entry = formatResultEntry(entries.length > 0 ? entries[0] : null);
+  const diagnostics = diagnosticsOf(stderr, stdout, reportParseError);
+  const error = entry.error ?? (entries.length === 0 && exitCode !== 0 ? diagnostics.stderr : null);
   return {
     exitCode,
     ok: Boolean(exitCode === 0 && entry.ok),
@@ -176,13 +131,9 @@ export const formatResult = ({ exitCode, report, stderr, stdout, reportParseErro
     response: entry.response,
     assertionResults: entry.assertionResults,
     testResults: entry.testResults,
-    error: entry.error,
+    error,
     summary,
-    redaction: {
-      headersOmitted: true,
-      requestUrlSecretsRedacted: entry._redactedUrl
-    },
-    diagnostics: diagnosticsOf(stderr, stdout, reportParseError)
+    diagnostics
   };
 };
 
