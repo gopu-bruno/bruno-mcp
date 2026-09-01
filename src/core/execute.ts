@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+import * as log from '../log.js';
 import type { CollectionRunOptions, VariableOverrides } from '../types.js';
 import { detectFormat, type CollectionFormat } from './readCollection.js';
 
@@ -254,7 +255,6 @@ const runBru = async ({
   paths,
   options = {},
   extraArgs = [],
-  verbose = false,
   timeoutMs = DEFAULT_TIMEOUT_MS
 }: RunBruArgs): Promise<RawRunResult> => {
   const dir = getSessionTmpDir();
@@ -262,7 +262,7 @@ const runBru = async ({
   const reportPath = path.join(dir, `report-${crypto.randomBytes(8).toString('hex')}.json`);
   const args = [...buildRunArgs(paths, options, reportPath), ...extraArgs];
 
-  if (verbose) process.stderr.write(`[bruno-mcp] spawn: node ${BRU_BIN} ${args.join(' ')} (cwd=${collectionPath})\n`);
+  log.debug(`spawn: node ${BRU_BIN} ${args.join(' ')} (cwd=${collectionPath})`);
 
   const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
@@ -304,7 +304,6 @@ interface ExecuteRequestArgs {
   requestPath: string;
   environment?: string;
   variables?: VariableOverrides;
-  verbose?: boolean;
   timeoutMs?: number;
 }
 
@@ -314,10 +313,9 @@ export const executeRequest = async ({
   requestPath,
   environment,
   variables,
-  verbose = false,
   timeoutMs = DEFAULT_TIMEOUT_MS
 }: ExecuteRequestArgs) => {
-  const raw = await runBru({ collectionPath, paths: [requestPath], options: { environment, variables }, verbose, timeoutMs });
+  const raw = await runBru({ collectionPath, paths: [requestPath], options: { environment, variables }, timeoutMs });
   return formatResult(raw);
 };
 

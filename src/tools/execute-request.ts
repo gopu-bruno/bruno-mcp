@@ -19,7 +19,7 @@ const hasUnresolvedVariables = (result: any): boolean => {
   return typeof url === 'string' && TEMPLATE_VAR.test(url);
 };
 
-export const registerExecuteRequestTool = (server: McpServer, { registry, verbose }: ToolContext): void => {
+export const registerExecuteRequestTool = (server: McpServer, { registry }: ToolContext): void => {
   server.registerTool(
     'execute_request',
     {
@@ -73,8 +73,7 @@ export const registerExecuteRequestTool = (server: McpServer, { registry, verbos
           collectionPath: collection.path,
           requestPath,
           environment,
-          variables,
-          verbose
+          variables
         });
         const needsEnvironment = !result.ok && !environment && hasUnresolvedVariables(result);
         return textResult(

@@ -4,6 +4,7 @@ import yaml from 'js-yaml';
 import { parseFolder, parseRequest } from '@usebruno/filestore';
 
 import type { RequestInfo } from '../types.js';
+import * as log from '../log.js';
 
 export type CollectionFormat = 'bru' | 'yml';
 
@@ -160,8 +161,8 @@ const scanViaParse = (filePath: string, format: CollectionFormat): ScannedReques
       method: parsed.request?.method || null,
       url: parsed.request?.url || null
     };
-  } catch (_) {
-    // malformed files are skipped
+  } catch (err: any) {
+    log.warn(`skipping ${filePath}: ${err && err.message ? err.message : err}`);
     return null;
   }
 };

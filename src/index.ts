@@ -2,30 +2,28 @@
 import { hideBin } from 'yargs/helpers';
 
 import { parseArgs, validateConfig } from './config.js';
-import { startStdioServer } from './transports/stdio.js';
+import { redirectConsoleLogToStderr, startStdioServer } from './transports/stdio.js';
 import { discoverCollections } from './core/discover.js';
+import * as log from './log.js';
 
-const log = (msg: string): void => {
-  process.stderr.write(`[bruno-mcp] ${msg}\n`);
-};
+redirectConsoleLogToStderr();
 
 const { config, verbose } = parseArgs(hideBin(process.argv));
+log.setVerbose(verbose);
 
 const errors = validateConfig(config);
 if (errors.length > 0) {
-  for (const msg of errors) process.stderr.write(`bruno-mcp: ${msg}\n`);
+  for (const msg of errors) log.error(msg);
   process.exit(1);
 }
 
 const { collections, source, diagnostics } = discoverCollections(config);
 
-if (verbose) {
-  for (const d of diagnostics) log(d);
-  log(`Found ${collections.length} collection${collections.length === 1 ? '' : 's'} (source: ${source ?? 'none'})`);
-}
+for (const d of diagnostics) log.debug(d);
+log.debug(`Found ${collections.length} collection${collections.length === 1 ? '' : 's'} (source: ${source ?? 'none'})`);
 
 if (collections.length === 0) {
-  log(
+  log.warn(
     'No collections found. Available options:\n' +
     '  --collection <path>   Pass a collection path\n' +
     '  --workspace <path>    Pass a workspace path\n' +
@@ -35,8 +33,8 @@ if (collections.length === 0) {
   );
 }
 
-startStdioServer({ config, verbose }).catch((err) => {
-  process.stderr.write(`bruno-mcp: Something went wrong while starting the server:\n${err && err.stack ? err.stack : err}\n`);
+startStdioServer({ config }).catch((err) => {
+  log.error(`Something went wrong while starting the server:\n${err && err.stack ? err.stack : err}`);
   process.exit(1);
 });
 
