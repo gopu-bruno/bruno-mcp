@@ -50,7 +50,8 @@ export const registerExecuteRequestTool = (server: McpServer, { registry }: Tool
         return textResult(unknownCollectionMessage(registry, collectionPath), true);
       }
 
-      if (!registry.resolveRequestPath(collectionPath, requestPath)) {
+      const resolved = registry.resolveRequestPath(collectionPath, requestPath);
+      if (!resolved) {
         return textResult(
           {
             error: `Request not found: "${requestPath}" in collection "${collection.name}"`,
@@ -71,7 +72,7 @@ export const registerExecuteRequestTool = (server: McpServer, { registry }: Tool
       try {
         const result = await executeRequest({
           collectionPath: collection.path,
-          requestPath,
+          requestPath: resolved.path,
           environment,
           variables
         });

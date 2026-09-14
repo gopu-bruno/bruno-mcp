@@ -4,9 +4,9 @@ import { createServer } from '../server.js';
 import * as log from '../log.js';
 import type { DiscoveryConfig } from '../types.js';
 
-// Redirect console.log to stderr so stdout remains reserved for JSON-RPC
+// Redirect console.log/info/debug to console.error to avoid corrupting the JSON-RPC stream.
 export const redirectConsoleLogToStderr = (): void => {
-  console.log = console.error;
+  console.log = console.info = console.debug = console.error;
 };
 
 interface StartStdioServerArgs {

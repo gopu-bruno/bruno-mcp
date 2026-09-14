@@ -24,12 +24,15 @@ log.debug(`Found ${collections.length} collection${collections.length === 1 ? ''
 
 if (collections.length === 0) {
   log.warn(
-    'No collections found. Available options:\n' +
-    '  --collection <path>   Pass a collection path\n' +
-    '  --workspace <path>    Pass a workspace path\n' +
-    '  Or run from inside a Bruno project folder.\n' +
-    'Auto-discovery checked recent collections but found none. ' +
-    'Use --no-auto-discovery to skip this check.'
+    source
+      ? `No collections found. This server is scoped to ${source === 'explicit' ? 'the paths passed to --collection/--workspace' : source}. ` +
+        'That scope holds no collections.'
+      : 'No collections found. Available options:\n' +
+        '  --collection <path>   Pass a collection path\n' +
+        '  --workspace <path>    Pass a workspace path\n' +
+        '  Or run from inside a Bruno project folder.\n' +
+        'Auto-discovery checked recent collections but found none. ' +
+        'Use --no-auto-discovery to skip this check.'
   );
 }
 

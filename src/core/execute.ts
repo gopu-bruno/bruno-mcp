@@ -102,20 +102,27 @@ const formatResultEntry = (entry: any) => {
   };
 };
 
-const diagnosticsOf = (stderr: string, stdout: string, reportParseError: string | null) => {
-  return {
-    reportParseError: reportParseError || null,
-    stderr: stderr && stderr.trim() ? stderr.trim() : null,
-    stdoutTail: stdout && stdout.trim() ? stdout.trim().split('\n').slice(-20).join('\n') : null
-  };
+const formatRunFailure = (
+  exitCode: number | null,
+  stderr: string,
+  parseError: string | null,
+  hasReport: boolean
+): string => {
+  const details = stderr.trim();
+  if (parseError) {
+    return `Could not parse the run report: ${parseError}${details ? `\n${details}` : ''}`;
+  }
+  if (details) return details;
+  return hasReport
+    ? `bru exited with code ${exitCode} but the report contained no results`
+    : `bru exited with code ${exitCode} without producing a report`;
 };
 
 interface RawRunResult {
   exitCode: number | null;
   report: any;
   stderr: string;
-  stdout: string;
-  reportParseError: string | null;
+  parseError: string | null;
 }
 
 const normalizeReport = (report: any): { entries: any[]; summary: any } => {
@@ -128,11 +135,11 @@ const normalizeReport = (report: any): { entries: any[]; summary: any } => {
   return { entries, summary };
 };
 
-export const formatResult = ({ exitCode, report, stderr, stdout, reportParseError }: RawRunResult) => {
+export const formatResult = ({ exitCode, report, stderr, parseError }: RawRunResult) => {
   const { entries, summary } = normalizeReport(report);
   const entry = formatResultEntry(entries.length > 0 ? entries[0] : null);
-  const diagnostics = diagnosticsOf(stderr, stdout, reportParseError);
-  const error = entry.error ?? (entries.length === 0 && exitCode !== 0 ? diagnostics.stderr : null);
+  const error =
+    entry.error ?? (entries.length === 0 ? formatRunFailure(exitCode, stderr, parseError, report != null) : null);
   return {
     exitCode,
     ok: Boolean(exitCode === 0 && entry.ok),
@@ -141,8 +148,7 @@ export const formatResult = ({ exitCode, report, stderr, stdout, reportParseErro
     assertionResults: entry.assertionResults,
     testResults: entry.testResults,
     error,
-    summary,
-    diagnostics
+    summary
   };
 };
 
@@ -264,11 +270,12 @@ const runBru = async ({
 
   log.debug(`spawn: node ${BRU_BIN} ${args.join(' ')} (cwd=${collectionPath})`);
 
-  const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
-  const child = spawn(process.execPath, [BRU_BIN, ...args], { cwd: collectionPath });
+  const child = spawn(process.execPath, [BRU_BIN, ...args], {
+    cwd: collectionPath,
+    stdio: ['ignore', 'ignore', 'pipe']
+  });
 
-  child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
   child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
 
   const exitCode = await new Promise<number | null>((resolve, reject) => {
@@ -281,22 +288,21 @@ const runBru = async ({
     child.on('exit', (code) => { clearTimeout(timer); resolve(code); });
   });
 
-  const stdout = Buffer.concat(stdoutChunks).toString('utf8');
   const stderr = Buffer.concat(stderrChunks).toString('utf8');
 
   let report: any = null;
-  let reportParseError: string | null = null;
+  let parseError: string | null = null;
   if (fs.existsSync(reportPath)) {
     try {
       report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
     } catch (err: any) {
-      reportParseError = err.message;
+      parseError = err.message;
     } finally {
       try { fs.unlinkSync(reportPath); } catch (_) { }
     }
   }
 
-  return { exitCode, report, stderr, stdout, reportParseError };
+  return { exitCode, report, stderr, parseError };
 };
 
 interface ExecuteRequestArgs {
