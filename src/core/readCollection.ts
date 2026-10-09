@@ -49,11 +49,29 @@ const readFolderSeq = (dir: string, format: CollectionFormat): number | undefine
   }
 };
 
-// folders first (by seq, then name), then requests by seq: mirrors how Bruno lists a collection
-const bySeqThenName = (a: any, b: any): number => {
-  const sa = typeof a.seq === 'number' ? a.seq : Infinity;
-  const sb = typeof b.seq === 'number' ? b.seq : Infinity;
-  return sa !== sb ? sa - sb : String(a.name).localeCompare(String(b.name));
+const hasValidSeq = (seq: unknown): seq is number => Number.isInteger(seq) && (seq as number) > 0;
+
+const requestSeq = (request: { seq: number | undefined }): number => (hasValidSeq(request.seq) ? request.seq : Infinity);
+
+// sorts folders by seq, and folders without a seq by name: mirrors how Bruno lists a collection
+const sortByNameThenSequence = <T extends { name: string; seq: number | undefined }>(items: T[]): T[] => {
+  const byName = [...items].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted: (T | T[])[] = byName.filter((item) => !hasValidSeq(item.seq));
+
+  const sequenced = byName.filter((item) => hasValidSeq(item.seq)).sort((a, b) => (a.seq as number) - (b.seq as number));
+  for (const item of sequenced) {
+    const position = (item.seq as number) - 1;
+    const existing = sorted[position];
+    const sharesSeq = Array.isArray(existing) ? existing[0].seq === item.seq : existing?.seq === item.seq;
+
+    if (sharesSeq) {
+      sorted.splice(position, 1, Array.isArray(existing) ? [...existing, item] : [existing, item]);
+    } else {
+      sorted.splice(position, 0, item);
+    }
+  }
+
+  return sorted.flat() as T[];
 };
 
 interface ScannedRequest {
@@ -217,8 +235,9 @@ export const readCollectionIndex = (collectionPath: string): RequestInfo[] => {
       }
     }
 
-    for (const folder of folders.sort(bySeqThenName)) traverse(folder.pathname);
-    for (const request of requests.sort(bySeqThenName)) {
+    // folders first (by seq, then name), then requests by seq: mirrors how Bruno lists a collection
+    for (const folder of sortByNameThenSequence(folders)) traverse(folder.pathname);
+    for (const request of requests.sort((a, b) => requestSeq(a) - requestSeq(b) || a.name.localeCompare(b.name))) {
       index.push({
         name: request.name,
         pathname: request.pathname,
